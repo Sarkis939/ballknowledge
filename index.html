@@ -2,147 +2,194 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Premier League Matches</title>
+<title>Football Dashboard</title>
 <link rel="stylesheet" href="style.css">
-<style>
-/* Inline CSS in case you don't have style.css yet */
-body {
-  font-family: 'Arial', sans-serif;
-  background-color: #f4f4f4;
-  margin: 0;
-  padding: 20px;
-  color: #333;
-}
-
-h1, h2 {
-  color: #2c3e50;
-  margin-bottom: 10px;
-}
-
-#upcoming, #past {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.match {
-  background-color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 15px;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  transition: transform 0.1s ease;
-}
-
-.match:hover {
-  transform: translateY(-2px);
-}
-
-.match .match-info {
-  flex-grow: 1;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.match .match-name {
-  font-weight: bold;
-  font-size: 1em;
-}
-
-.match .match-date {
-  color: #555;
-  font-size: 0.85em;
-}
-
-.match.upcoming {
-  border-left: 4px solid #1abc9c;
-}
-
-.match.live {
-  border-left: 4px solid #e74c3c;
-}
-</style>
 </head>
-<body>
+<body class="light-mode">
 
-<h1>Premier League Matches</h1>
+<header>
+  <h1>Football Matches</h1>
+  <button id="settingsBtn">Settings ⚙️</button>
+</header>
 
-<h2>Upcoming Matches</h2>
-<div id="upcoming">Loading...</div>
+<div class="controls">
+  <select id="leagueSelect">
+    <option value="">Select League</option>
+  </select>
+  <input type="text" id="searchInput" placeholder="Search by club name">
+  <button id="sortClub">Sort by Club</button>
+  <button id="sortDate">Sort by Date</button>
+</div>
 
-<h2>Past Matches</h2>
-<div id="past">Loading...</div>
+<section>
+  <h2>Upcoming Matches</h2>
+  <div id="upcoming">Loading...</div>
+
+  <h2>Past Matches</h2>
+  <div id="past">Loading...</div>
+</section>
+
+<div id="settingsPanel">
+  <h2>Settings</h2>
+  <label>
+    <input type="checkbox" id="darkModeToggle"> Dark Mode
+  </label>
+  <label>
+    Gmail:
+    <input type="email" id="gmailInput" placeholder="you@example.com">
+  </label>
+  <label>
+    <input type="checkbox" id="notifyToggle"> Enable Notifications
+  </label>
+  <button id="closeSettings">Close</button>
+</div>
+
+<div id="matchModal">
+  <div id="modalContent">
+    <span id="closeModal">&times;</span>
+    <div id="modalBody">Loading...</div>
+  </div>
+</div>
 
 <script>
-const API_KEY = "123"; // Free TheSportsDB key
-const PREMIER_LEAGUE_ID = 4328; // Premier League
+const API_KEY="123"
+let upcomingMatches=[], pastMatches=[], teamLogos={}
+const upcomingContainer=document.getElementById("upcoming")
+const pastContainer=document.getElementById("past")
+const leagueSelect=document.getElementById("leagueSelect")
+const modal=document.getElementById("matchModal")
+const modalBody=document.getElementById("modalBody")
+const closeModal=document.getElementById("closeModal")
 
-// Containers
-const upcomingContainer = document.getElementById("upcoming");
-const pastContainer = document.getElementById("past");
-upcomingContainer.innerHTML = "Loading...";
-pastContainer.innerHTML = "Loading...";
+function createMatchCard(match){
+  const div=document.createElement("div")
+  div.className=`match ${match.status}`
+  div.dataset.eventId=match.idEvent
+  div.innerHTML=`
+    <div class="match-top">
+      <span class="team"><img src="${teamLogos[match.home]}" alt="${match.home}">${match.home}</span>
+      <span class="score">${match.score}</span>
+      <span class="team"><img src="${teamLogos[match.away]}" alt="${match.away}">${match.away}</span>
+    </div>
+    <div class="match-bottom">
+      <span>Start: ${match.start}</span>
+      <span>End: ${match.end}</span>
+    </div>
+  `
+  div.addEventListener("click",()=>{
+    if(!match.idEvent) return
+    fetch(`https://www.thesportsdb.com/api/v1/json/${API_KEY}/lookupevent.php?id=${match.idEvent}`)
+      .then(res=>res.json())
+      .then(data=>{
+        if(!data.events) return
+        const info=data.events[0]
+        let html=`<h2>${info.strEvent}</h2>
+                  <p>Status: ${info.strStatus||"Unknown"}</p>
+                  <p>Score: ${info.intHomeScore||0}-${info.intAwayScore||0}</p>`
+        if(info.strHomeGoalDetails) html+=`<p><strong>Home Goals:</strong> ${info.strHomeGoalDetails.replace(/;/g,'<br>')}</p>`
+        if(info.strAwayGoalDetails) html+=`<p><strong>Away Goals:</strong> ${info.strAwayGoalDetails.replace(/;/g,'<br>')}</p>`
+        if(info.strHomeLineupGoalkeeper) html+=`<p><strong>Home GK:</strong> ${info.strHomeLineupGoalkeeper}</p>`
+        if(info.strAwayLineupGoalkeeper) html+=`<p><strong>Away GK:</strong> ${info.strAwayLineupGoalkeeper}</p>`
+        if(info.strHomeLineupDefense) html+=`<p><strong>Home Defense:</strong> ${info.strHomeLineupDefense}</p>`
+        if(info.strAwayLineupDefense) html+=`<p><strong>Away Defense:</strong> ${info.strAwayLineupDefense}</p>`
+        modalBody.innerHTML=html
+        modal.style.display="block"
+      })
+  })
+  return div
+}
 
-// Step 1: Fetch all teams in Premier League
-fetch(`https://www.thesportsdb.com/api/v1/json/${API_KEY}/lookup_all_teams.php?id=${PREMIER_LEAGUE_ID}`)
-.then(res => res.json())
-.then(data => {
-  if (!data.teams) throw new Error("No teams found");
-  const teams = data.teams;
+function renderMatches(container,matches){
+  container.innerHTML=""
+  matches.forEach(match=>{
+    container.appendChild(createMatchCard(match))
+  })
+}
 
-  upcomingContainer.innerHTML = "";
-  pastContainer.innerHTML = "";
+function sortByClub(matches){return matches.slice().sort((a,b)=>(a.home+a.away).toLowerCase().localeCompare((b.home+b.away).toLowerCase()))}
+function sortByDate(matches){return matches.slice().sort((a,b)=>new Date(a.start)-new Date(b.start))}
+function filterMatchesByClub(matches,query){const q=query.toLowerCase();return matches.filter(m=>m.home.toLowerCase().includes(q)||m.away.toLowerCase().includes(q))}
 
-  // Step 2: For each team, fetch upcoming and past matches
-  teams.forEach(team => {
-    const teamID = team.idTeam;
+fetch(`https://www.thesportsdb.com/api/v1/json/${API_KEY}/all_leagues.php`)
+.then(res=>res.json())
+.then(data=>{if(!data.leagues) return;data.leagues.forEach(league=>{const option=document.createElement("option");option.value=league.idLeague;option.textContent=league.strLeague;leagueSelect.appendChild(option)})})
 
-    // Upcoming matches
-    fetch(`https://www.thesportsdb.com/api/v1/json/${API_KEY}/eventsnext.php?id=${teamID}`)
-      .then(res => res.json())
-      .then(eventsData => {
-        if (!eventsData.events) return;
-        eventsData.events.forEach(match => {
-          const div = document.createElement("div");
-          div.className = "match upcoming";
-          div.innerHTML = `
-            <div class="match-info">
-              <span class="match-name">${match.strHomeTeam} vs ${match.strAwayTeam}</span>
-              <span class="match-date">${match.dateEvent} ${match.strTime}</span>
-            </div>
-          `;
-          upcomingContainer.appendChild(div);
-        });
-      });
-
-    // Past matches
-    fetch(`https://www.thesportsdb.com/api/v1/json/${API_KEY}/eventslast.php?id=${teamID}`)
-      .then(res => res.json())
-      .then(lastData => {
-        if (!lastData.results) return;
-        lastData.results.forEach(match => {
-          const div = document.createElement("div");
-          div.className = "match";
-          div.innerHTML = `
-            <div class="match-info">
-              <span class="match-name">${match.strHomeTeam} vs ${match.strAwayTeam}</span>
-              <span class="match-date">${match.dateEvent}</span>
-            </div>
-          `;
-          pastContainer.appendChild(div);
-        });
-      });
-
-  });
+leagueSelect.addEventListener("change",()=>{
+  const leagueID=leagueSelect.value
+  if(!leagueID) return
+  upcomingContainer.textContent="Loading..."
+  pastContainer.textContent="Loading..."
+  upcomingMatches=[]; pastMatches=[]; teamLogos={}
+  fetch(`https://www.thesportsdb.com/api/v1/json/${API_KEY}/lookup_all_teams.php?id=${leagueID}`)
+    .then(res=>res.json())
+    .then(data=>{
+      if(!data.teams) return
+      data.teams.forEach(team=>{
+        teamLogos[team.strTeam]=team.strTeamBadge
+        const teamID=team.idTeam
+        fetch(`https://www.thesportsdb.com/api/v1/json/${API_KEY}/eventsnext.php?id=${teamID}`)
+          .then(res=>res.json())
+          .then(eventsData=>{
+            if(!eventsData.events) return
+            eventsData.events.forEach(match=>{
+              upcomingMatches.push({
+                idEvent: match.idEvent,
+                home: match.strHomeTeam,
+                away: match.strAwayTeam,
+                score: match.intHomeScore!==null?match.intHomeScore+"-"+match.intAwayScore:"-",
+                start: match.dateEvent+" "+(match.strTime||""),
+                end:"TBD",
+                status:"upcoming"
+              })
+            })
+            renderMatches(upcomingContainer,upcomingMatches)
+          })
+        fetch(`https://www.thesportsdb.com/api/v1/json/${API_KEY}/eventslast.php?id=${teamID}`)
+          .then(res=>res.json())
+          .then(lastData=>{
+            if(!lastData.results) return
+            lastData.results.forEach(match=>{
+              pastMatches.push({
+                idEvent: match.idEvent,
+                home: match.strHomeTeam,
+                away: match.strAwayTeam,
+                score: match.intHomeScore+"-"+match.intAwayScore,
+                start: match.dateEvent,
+                end:"TBD",
+                status:"past"
+              })
+            })
+            renderMatches(pastContainer,pastMatches)
+          })
+      })
+    })
 })
-.catch(err => {
-  upcomingContainer.textContent = "Error loading matches";
-  pastContainer.textContent = "Error loading matches";
-  console.error(err);
-});
+
+document.getElementById("sortClub").addEventListener("click",()=>{
+  renderMatches(upcomingContainer,sortByClub(upcomingMatches))
+  renderMatches(pastContainer,sortByClub(pastMatches))
+})
+document.getElementById("sortDate").addEventListener("click",()=>{
+  renderMatches(upcomingContainer,sortByDate(upcomingMatches))
+  renderMatches(pastContainer,sortByDate(pastMatches))
+})
+document.getElementById("searchInput").addEventListener("input",(e)=>{
+  const query=e.target.value
+  renderMatches(upcomingContainer,filterMatchesByClub(upcomingMatches,query))
+  renderMatches(pastContainer,filterMatchesByClub(pastMatches,query))
+})
+
+const settingsPanel=document.getElementById("settingsPanel")
+document.getElementById("settingsBtn").addEventListener("click",()=>settingsPanel.style.display="block")
+document.getElementById("closeSettings").addEventListener("click",()=>settingsPanel.style.display="none")
+const darkModeToggle=document.getElementById("darkModeToggle")
+darkModeToggle.addEventListener("change",()=>document.body.className=darkModeToggle.checked?"dark-mode":"light-mode")
+const notifyToggle=document.getElementById("notifyToggle")
+notifyToggle.addEventListener("change",()=>{
+  if(notifyToggle.checked && Notification.permission!=="granted") Notification.requestPermission()
+})
+closeModal.onclick=()=>modal.style.display="none"
+window.onclick=e=>{if(e.target==modal) modal.style.display="none"}
 </script>
 
 </body>
