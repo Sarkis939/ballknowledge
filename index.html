@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Football Dashboard</title>
+<title>Universal Football Stats Viewer</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body class="light-mode">
 
 <header>
-  <h1>Football Matches</h1>
+  <h1>Football Match Stats</h1>
   <button id="settingsBtn">Settings ⚙️</button>
 </header>
 
@@ -53,7 +53,9 @@
 
 <script>
 const API_KEY="123"
+const CORS_PROXY="https://cors-anywhere.herokuapp.com/"
 let upcomingMatches=[], pastMatches=[], teamLogos={}
+
 const upcomingContainer=document.getElementById("upcoming")
 const pastContainer=document.getElementById("past")
 const leagueSelect=document.getElementById("leagueSelect")
@@ -61,15 +63,17 @@ const modal=document.getElementById("matchModal")
 const modalBody=document.getElementById("modalBody")
 const closeModal=document.getElementById("closeModal")
 
+function fetchAPI(url){return fetch(CORS_PROXY+url).then(res=>res.json())}
+
 function createMatchCard(match){
   const div=document.createElement("div")
   div.className=`match ${match.status}`
   div.dataset.eventId=match.idEvent
   div.innerHTML=`
     <div class="match-top">
-      <span class="team"><img src="${teamLogos[match.home]}" alt="${match.home}">${match.home}</span>
+      <span class="team"><img src="${teamLogos[match.home]||''}" alt="${match.home}">${match.home}</span>
       <span class="score">${match.score}</span>
-      <span class="team"><img src="${teamLogos[match.away]}" alt="${match.away}">${match.away}</span>
+      <span class="team"><img src="${teamLogos[match.away]||''}" alt="${match.away}">${match.away}</span>
     </div>
     <div class="match-bottom">
       <span>Start: ${match.start}</span>
@@ -78,8 +82,7 @@ function createMatchCard(match){
   `
   div.addEventListener("click",()=>{
     if(!match.idEvent) return
-    fetch(`https://www.thesportsdb.com/api/v1/json/${API_KEY}/lookupevent.php?id=${match.idEvent}`)
-      .then(res=>res.json())
+    fetchAPI(`https://www.thesportsdb.com/api/v1/json/${API_KEY}/lookupevent.php?id=${match.idEvent}`)
       .then(data=>{
         if(!data.events) return
         const info=data.events[0]
@@ -92,76 +95,90 @@ function createMatchCard(match){
         if(info.strAwayLineupGoalkeeper) html+=`<p><strong>Away GK:</strong> ${info.strAwayLineupGoalkeeper}</p>`
         if(info.strHomeLineupDefense) html+=`<p><strong>Home Defense:</strong> ${info.strHomeLineupDefense}</p>`
         if(info.strAwayLineupDefense) html+=`<p><strong>Away Defense:</strong> ${info.strAwayLineupDefense}</p>`
+        if(info.strHomeLineupMidfield) html+=`<p><strong>Home Midfield:</strong> ${info.strHomeLineupMidfield}</p>`
+        if(info.strAwayLineupMidfield) html+=`<p><strong>Away Midfield:</strong> ${info.strAwayLineupMidfield}</p>`
+        if(info.strHomeLineupForward) html+=`<p><strong>Home Forward:</strong> ${info.strHomeLineupForward}</p>`
+        if(info.strAwayLineupForward) html+=`<p><strong>Away Forward:</strong> ${info.strAwayLineupForward}</p>`
+        if(info.strHomeYellowCards) html+=`<p><strong>Home Yellow Cards:</strong> ${info.strHomeYellowCards}</p>`
+        if(info.strAwayYellowCards) html+=`<p><strong>Away Yellow Cards:</strong> ${info.strAwayYellowCards}</p>`
+        if(info.strHomeRedCards) html+=`<p><strong>Home Red Cards:</strong> ${info.strHomeRedCards}</p>`
+        if(info.strAwayRedCards) html+=`<p><strong>Away Red Cards:</strong> ${info.strAwayRedCards}</p>`
         modalBody.innerHTML=html
         modal.style.display="block"
       })
+      .catch(()=>alert("Failed to load match details"))
   })
   return div
 }
 
 function renderMatches(container,matches){
   container.innerHTML=""
-  matches.forEach(match=>{
-    container.appendChild(createMatchCard(match))
-  })
+  matches.forEach(match=>container.appendChild(createMatchCard(match)))
 }
 
 function sortByClub(matches){return matches.slice().sort((a,b)=>(a.home+a.away).toLowerCase().localeCompare((b.home+b.away).toLowerCase()))}
 function sortByDate(matches){return matches.slice().sort((a,b)=>new Date(a.start)-new Date(b.start))}
 function filterMatchesByClub(matches,query){const q=query.toLowerCase();return matches.filter(m=>m.home.toLowerCase().includes(q)||m.away.toLowerCase().includes(q))}
 
-fetch(`https://www.thesportsdb.com/api/v1/json/${API_KEY}/all_leagues.php`)
-.then(res=>res.json())
-.then(data=>{if(!data.leagues) return;data.leagues.forEach(league=>{const option=document.createElement("option");option.value=league.idLeague;option.textContent=league.strLeague;leagueSelect.appendChild(option)})})
+fetchAPI(`https://www.thesportsdb.com/api/v1/json/${API_KEY}/all_leagues.php`)
+  .then(data=>{if(!data.leagues) return
+    data.leagues.forEach(league=>{
+      const option=document.createElement("option")
+      option.value=league.idLeague
+      option.textContent=league.strLeague
+      leagueSelect.appendChild(option)
+    })
+  })
 
-leagueSelect.addEventListener("change",()=>{
-  const leagueID=leagueSelect.value
+leagueSelect.addEventListener("change", ()=>{
+  const leagueID = leagueSelect.value
   if(!leagueID) return
   upcomingContainer.textContent="Loading..."
   pastContainer.textContent="Loading..."
   upcomingMatches=[]; pastMatches=[]; teamLogos={}
-  fetch(`https://www.thesportsdb.com/api/v1/json/${API_KEY}/lookup_all_teams.php?id=${leagueID}`)
-    .then(res=>res.json())
+
+  fetchAPI(`https://www.thesportsdb.com/api/v1/json/${API_KEY}/lookup_all_teams.php?id=${leagueID}`)
     .then(data=>{
       if(!data.teams) return
-      data.teams.forEach(team=>{
-        teamLogos[team.strTeam]=team.strTeamBadge
-        const teamID=team.idTeam
-        fetch(`https://www.thesportsdb.com/api/v1/json/${API_KEY}/eventsnext.php?id=${teamID}`)
-          .then(res=>res.json())
-          .then(eventsData=>{
-            if(!eventsData.events) return
-            eventsData.events.forEach(match=>{
-              upcomingMatches.push({
-                idEvent: match.idEvent,
-                home: match.strHomeTeam,
-                away: match.strAwayTeam,
-                score: match.intHomeScore!==null?match.intHomeScore+"-"+match.intAwayScore:"-",
-                start: match.dateEvent+" "+(match.strTime||""),
-                end:"TBD",
-                status:"upcoming"
-              })
+      data.teams.forEach(team=>teamLogos[team.strTeam]=team.strTeamBadge)
+
+      fetchAPI(`https://www.thesportsdb.com/api/v1/json/${API_KEY}/eventsnextleague.php?id=${leagueID}`)
+        .then(events=>{
+          if(!events.events) events.events=[]
+          events.events.forEach(match=>{
+            upcomingMatches.push({
+              idEvent: match.idEvent,
+              home: match.strHomeTeam,
+              away: match.strAwayTeam,
+              score: match.intHomeScore!==null?match.intHomeScore+"-"+match.intAwayScore:"-",
+              start: match.dateEvent+" "+(match.strTime||""),
+              end:"TBD",
+              status:"upcoming"
             })
-            renderMatches(upcomingContainer,upcomingMatches)
           })
-        fetch(`https://www.thesportsdb.com/api/v1/json/${API_KEY}/eventslast.php?id=${teamID}`)
-          .then(res=>res.json())
-          .then(lastData=>{
-            if(!lastData.results) return
-            lastData.results.forEach(match=>{
-              pastMatches.push({
-                idEvent: match.idEvent,
-                home: match.strHomeTeam,
-                away: match.strAwayTeam,
-                score: match.intHomeScore+"-"+match.intAwayScore,
-                start: match.dateEvent,
-                end:"TBD",
-                status:"past"
-              })
+          renderMatches(upcomingContainer,upcomingMatches)
+        })
+
+      fetchAPI(`https://www.thesportsdb.com/api/v1/json/${API_KEY}/eventspastleague.php?id=${leagueID}`)
+        .then(events=>{
+          if(!events.events) events.events=[]
+          events.events.forEach(match=>{
+            pastMatches.push({
+              idEvent: match.idEvent,
+              home: match.strHomeTeam,
+              away: match.strAwayTeam,
+              score: match.intHomeScore+"-"+match.intAwayScore,
+              start: match.dateEvent,
+              end:"TBD",
+              status:"past"
             })
-            renderMatches(pastContainer,pastMatches)
           })
-      })
+          renderMatches(pastContainer,pastMatches)
+        })
+    })
+    .catch(()=>{
+      upcomingContainer.textContent="Failed to load matches"
+      pastContainer.textContent="Failed to load matches"
     })
 })
 
@@ -191,6 +208,5 @@ notifyToggle.addEventListener("change",()=>{
 closeModal.onclick=()=>modal.style.display="none"
 window.onclick=e=>{if(e.target==modal) modal.style.display="none"}
 </script>
-
 </body>
 </html>
