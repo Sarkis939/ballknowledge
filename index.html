@@ -1,1 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Premier League Matches</title>
+<link rel="stylesheet" href="style.css">
+<style>
+/* Inline CSS in case you don't have style.css yet */
+body {
+  font-family: 'Arial', sans-serif;
+  background-color: #f4f4f4;
+  margin: 0;
+  padding: 20px;
+  color: #333;
+}
 
+h1, h2 {
+  color: #2c3e50;
+  margin-bottom: 10px;
+}
+
+#upcoming, #past {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.match {
+  background-color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 15px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  transition: transform 0.1s ease;
+}
+
+.match:hover {
+  transform: translateY(-2px);
+}
+
+.match .match-info {
+  flex-grow: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.match .match-name {
+  font-weight: bold;
+  font-size: 1em;
+}
+
+.match .match-date {
+  color: #555;
+  font-size: 0.85em;
+}
+
+.match.upcoming {
+  border-left: 4px solid #1abc9c;
+}
+
+.match.live {
+  border-left: 4px solid #e74c3c;
+}
+</style>
+</head>
+<body>
+
+<h1>Premier League Matches</h1>
+
+<h2>Upcoming Matches</h2>
+<div id="upcoming">Loading...</div>
+
+<h2>Past Matches</h2>
+<div id="past">Loading...</div>
+
+<script>
+const API_KEY = "123"; // Free TheSportsDB key
+const PREMIER_LEAGUE_ID = 4328; // Premier League
+
+// Containers
+const upcomingContainer = document.getElementById("upcoming");
+const pastContainer = document.getElementById("past");
+upcomingContainer.innerHTML = "Loading...";
+pastContainer.innerHTML = "Loading...";
+
+// Step 1: Fetch all teams in Premier League
+fetch(`https://www.thesportsdb.com/api/v1/json/${API_KEY}/lookup_all_teams.php?id=${PREMIER_LEAGUE_ID}`)
+.then(res => res.json())
+.then(data => {
+  if (!data.teams) throw new Error("No teams found");
+  const teams = data.teams;
+
+  upcomingContainer.innerHTML = "";
+  pastContainer.innerHTML = "";
+
+  // Step 2: For each team, fetch upcoming and past matches
+  teams.forEach(team => {
+    const teamID = team.idTeam;
+
+    // Upcoming matches
+    fetch(`https://www.thesportsdb.com/api/v1/json/${API_KEY}/eventsnext.php?id=${teamID}`)
+      .then(res => res.json())
+      .then(eventsData => {
+        if (!eventsData.events) return;
+        eventsData.events.forEach(match => {
+          const div = document.createElement("div");
+          div.className = "match upcoming";
+          div.innerHTML = `
+            <div class="match-info">
+              <span class="match-name">${match.strHomeTeam} vs ${match.strAwayTeam}</span>
+              <span class="match-date">${match.dateEvent} ${match.strTime}</span>
+            </div>
+          `;
+          upcomingContainer.appendChild(div);
+        });
+      });
+
+    // Past matches
+    fetch(`https://www.thesportsdb.com/api/v1/json/${API_KEY}/eventslast.php?id=${teamID}`)
+      .then(res => res.json())
+      .then(lastData => {
+        if (!lastData.results) return;
+        lastData.results.forEach(match => {
+          const div = document.createElement("div");
+          div.className = "match";
+          div.innerHTML = `
+            <div class="match-info">
+              <span class="match-name">${match.strHomeTeam} vs ${match.strAwayTeam}</span>
+              <span class="match-date">${match.dateEvent}</span>
+            </div>
+          `;
+          pastContainer.appendChild(div);
+        });
+      });
+
+  });
+})
+.catch(err => {
+  upcomingContainer.textContent = "Error loading matches";
+  pastContainer.textContent = "Error loading matches";
+  console.error(err);
+});
+</script>
+
+</body>
+</html>
